@@ -43,9 +43,20 @@ def load_recipes():
 
 # Форматирование текста рецепта
 def format_recipe(recipe):
-    formatted = recipe.get('title', 'Без названия') + '\n\n'
-    formatted += re.sub(r'[\[\]\{\}]', '', recipe.get('ingredients', 'Без ингредиентов')) + '\n\n'
-    formatted += re.sub(r'[\[\]\{\}]', '', recipe.get('instructions', 'Без инструкций'))
+    # Получаем данные
+    title = recipe.get('title', 'Без названия')
+    ingredients = recipe.get('ingredients', [])
+    instructions = recipe.get('instructions', [])
+
+    # Преобразуем список ингредиентов в строку
+    ingredients_str = '\n'.join(f"{item['ingredient']} - {item['amount']}" for item in ingredients) if isinstance(ingredients, list) else ingredients
+    # Преобразуем список инструкций в строку
+    instructions_str = '\n'.join(instructions) if isinstance(instructions, list) else instructions
+
+    # Форматируем текст рецепта
+    formatted = title + '\n\n'
+    formatted += re.sub(r'[\[\]\{\}]', '', ingredients_str) + '\n\n'
+    formatted += re.sub(r'[\[\]\{\}]', '', instructions_str)
     return formatted
 
 # Отправка сообщения в канал
@@ -76,6 +87,7 @@ def schedule_messages(bot, chat_id, recipes):
 def main():
     # Инициализация бота
     bot = Bot(token=TOKEN)
+
     try:
         # Проверка подключения к Telegram API
         bot.get_me()
