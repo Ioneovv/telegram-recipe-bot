@@ -18,6 +18,17 @@ jobs:
       with:
         python-version: '3.x'
 
+    - name: Check files
+      run: |
+        echo "Listing files in the repository:"
+        ls -la
+        echo "Displaying contents of requirements.txt:"
+        cat requirements.txt
+        echo "Displaying contents of bot.py:"
+        cat bot.py
+        echo "Displaying contents of .env:"
+        cat .env
+
     - name: Install dependencies
       run: |
         python -m venv venv
