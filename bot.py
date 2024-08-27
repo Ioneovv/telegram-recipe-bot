@@ -66,15 +66,24 @@ def schedule_messages(bot, chat_id, recipes):
 
         recipe = random.choice(recipes)
         recipes.remove(recipe)  # Удаляем выбранный рецепт из списка
+        logging.info("Выбран рецепт для отправки.")
         send_recipe(bot, chat_id, recipe)
 
-    schedule.every().day.at("08:00").do(send_random_recipe)
-    schedule.every().day.at("18:00").do(send_random_recipe)
-    logging.info("Расписание сообщений установлено.")
+    # Настроить отправку сообщений каждую минуту
+    schedule.every(1).minute.do(send_random_recipe)
+    logging.info("Расписание сообщений установлено для отправки каждую минуту.")
 
 def main():
     # Инициализация бота
     bot = Bot(token=TOKEN)
+    try:
+        # Проверка подключения к Telegram API
+        bot.get_me()
+        logging.info("Бот успешно подключен к Telegram API.")
+    except TelegramError as e:
+        logging.error(f"Ошибка при подключении к Telegram API: {e}")
+        exit(1)
+    
     recipes = load_recipes()
     # Планирование сообщений
     schedule_messages(bot, CHAT_ID, recipes)
