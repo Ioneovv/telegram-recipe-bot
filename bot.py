@@ -4,7 +4,7 @@ import logging
 import schedule
 import time
 import random
-from telegram import Bot
+from telegram import Bot, TelegramError
 from dotenv import load_dotenv
 import os
 
@@ -16,22 +16,37 @@ load_dotenv()
 TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 CHAT_ID = os.getenv('TELEGRAM_CHANNEL_ID')
 
+# Проверка переменных окружения
+if not TOKEN or not CHAT_ID:
+    logging.error("Токен или ID канала не установлены в переменных окружения.")
+    exit(1)
+
 # Загрузить рецепты из JSON-файла
 def load_recipes():
-    with open('recipes.json', 'r', encoding='utf-8') as file:
-        return json.load(file)
+    try:
+        with open('recipes.json', 'r', encoding='utf-8') as file:
+            return json.load(file)
+    except FileNotFoundError:
+        logging.error("Файл recipes.json не найден.")
+        exit(1)
+    except json.JSONDecodeError:
+        logging.error("Ошибка декодирования JSON в файле recipes.json.")
+        exit(1)
 
 # Форматирование текста рецепта
 def format_recipe(recipe):
-    formatted = recipe['title'] + '\n\n'
-    formatted += re.sub(r'[\[\]\{\}]', '', recipe['ingredients']) + '\n\n'
-    formatted += re.sub(r'[\[\]\{\}]', '', recipe['instructions'])
+    formatted = recipe.get('title', 'Без названия') + '\n\n'
+    formatted += re.sub(r'[\[\]\{\}]', '', recipe.get('ingredients', 'Без ингредиентов')) + '\n\n'
+    formatted += re.sub(r'[\[\]\{\}]', '', recipe.get('instructions', 'Без инструкций'))
     return formatted
 
 # Отправка сообщения в канал
 def send_recipe(bot, chat_id, recipe):
     formatted_text = format_recipe(recipe)
-    bot.send_message(chat_id=chat_id, text=formatted_text)
+    try:
+        bot.send_message(chat_id=chat_id, text=formatted_text)
+    except TelegramError as e:
+        logging.error(f"Ошибка при отправке сообщения: {e}")
 
 # Планирование отправки рецептов
 def schedule_messages(bot, chat_id, recipes):
