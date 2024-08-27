@@ -22,7 +22,6 @@ jobs:
         python -m venv venv
         source venv/bin/activate
         pip install -r requirements.txt
-        pip install python-dotenv schedule python-telegram-bot
 
     - name: Run bot
       env:
