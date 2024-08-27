@@ -4,6 +4,7 @@ import logging
 import schedule
 import time
 import random
+import asyncio
 from telegram import Bot
 from telegram.error import TelegramError
 from dotenv import load_dotenv
@@ -59,38 +60,39 @@ def format_recipe(recipe):
     formatted += re.sub(r'[\[\]\{\}]', '', instructions_str)
     return formatted
 
-# Отправка сообщения в канал
-def send_recipe(bot, chat_id, recipe):
+# Асинхронная отправка сообщения в канал
+async def send_recipe(bot, chat_id, recipe):
     formatted_text = format_recipe(recipe)
     try:
-        bot.send_message(chat_id=chat_id, text=formatted_text)
+        await bot.send_message(chat_id=chat_id, text=formatted_text)
         logging.info("Сообщение успешно отправлено.")
     except TelegramError as e:
         logging.error(f"Ошибка при отправке сообщения: {e}")
 
-# Планирование отправки рецептов
-def schedule_messages(bot, chat_id, recipes):
-    def send_random_recipe():
-        if not recipes:
-            logging.info("Рецепты закончились. Перезагружаем список...")
-            recipes.extend(load_recipes())  # Перезагружаем список рецептов
+# Асинхронная функция для отправки случайного рецепта
+async def send_random_recipe(bot, chat_id, recipes):
+    if not recipes:
+        logging.info("Рецепты закончились. Перезагружаем список...")
+        recipes.extend(load_recipes())  # Перезагружаем список рецептов
 
-        recipe = random.choice(recipes)
-        recipes.remove(recipe)  # Удаляем выбранный рецепт из списка
-        logging.info("Выбран рецепт для отправки.")
-        send_recipe(bot, chat_id, recipe)
+    recipe = random.choice(recipes)
+    recipes.remove(recipe)  # Удаляем выбранный рецепт из списка
+    logging.info("Выбран рецепт для отправки.")
+    await send_recipe(bot, chat_id, recipe)
 
-    # Настроить отправку сообщений каждую минуту
-    schedule.every(1).minute.do(send_random_recipe)
-    logging.info("Расписание сообщений установлено для отправки каждую минуту.")
+# Асинхронная функция для планирования отправки рецептов
+async def schedule_messages(bot, chat_id, recipes):
+    while True:
+        await send_random_recipe(bot, chat_id, recipes)
+        await asyncio.sleep(60)  # Ждем 1 минуту
 
-def main():
+async def main():
     # Инициализация бота
     bot = Bot(token=TOKEN)
 
     try:
         # Проверка подключения к Telegram API
-        bot.get_me()
+        await bot.get_me()
         logging.info("Бот успешно подключен к Telegram API.")
     except TelegramError as e:
         logging.error(f"Ошибка при подключении к Telegram API: {e}")
@@ -98,12 +100,7 @@ def main():
     
     recipes = load_recipes()
     # Планирование сообщений
-    schedule_messages(bot, CHAT_ID, recipes)
-    # Запуск планировщика
-    logging.info("Запуск планировщика.")
-    while True:
-        schedule.run_pending()
-        time.sleep(1)
+    await schedule_messages(bot, CHAT_ID, recipes)
 
 if __name__ == '__main__':
-    main()
+    asyncio.run(main())
