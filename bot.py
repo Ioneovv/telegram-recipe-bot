@@ -4,7 +4,8 @@ import logging
 import schedule
 import time
 import random
-from telegram import Bot, TelegramError
+from telegram import Bot
+from telegram.error import TelegramError  # Импортируем TelegramError из telegram.error
 from dotenv import load_dotenv
 import os
 
