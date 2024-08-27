@@ -1,14 +1,20 @@
 import json
 import re
-from datetime import datetime
 import logging
 import schedule
 import time
+import random
 from telegram import Bot
-from telegram.ext import Updater
+from dotenv import load_dotenv
+import os
 
 # Настройка логирования
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+
+# Загрузить переменные окружения
+load_dotenv()
+TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
+CHAT_ID = os.getenv('TELEGRAM_CHANNEL_ID')
 
 # Загрузить рецепты из JSON-файла
 def load_recipes():
@@ -29,14 +35,19 @@ def send_recipe(bot, chat_id, recipe):
 
 # Планирование отправки рецептов
 def schedule_messages(bot, chat_id, recipes):
-    schedule.every().day.at("08:00").do(lambda: send_recipe(bot, chat_id, recipes[0]))
-    schedule.every().day.at("18:00").do(lambda: send_recipe(bot, chat_id, recipes[1]))
+    def send_random_recipe():
+        if not recipes:
+            logging.info("Рецепты закончились. Перезагружаем список...")
+            recipes.extend(load_recipes())  # Перезагружаем список рецептов
+
+        recipe = random.choice(recipes)
+        recipes.remove(recipe)  # Удаляем выбранный рецепт из списка
+        send_recipe(bot, chat_id, recipe)
+
+    schedule.every().day.at("08:00").do(send_random_recipe)
+    schedule.every().day.at("18:00").do(send_random_recipe)
 
 def main():
-    # Укажи токен бота и ID канала
-    TOKEN = 'YOUR_TELEGRAM_BOT_TOKEN'
-    CHAT_ID = 'YOUR_CHANNEL_ID'
-
     # Инициализация бота
     bot = Bot(token=TOKEN)
     recipes = load_recipes()
