@@ -10,23 +10,30 @@ from dotenv import load_dotenv
 import os
 
 # Настройка логирования
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.DEBUG)
 
 # Загрузить переменные окружения
 load_dotenv()
 TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 CHAT_ID = os.getenv('TELEGRAM_CHANNEL_ID')
 
+logging.debug(f"TOKEN: {TOKEN}")
+logging.debug(f"CHAT_ID: {CHAT_ID}")
+
 # Проверка переменных окружения
 if not TOKEN or not CHAT_ID:
     logging.error("Токен или ID канала не установлены в переменных окружения.")
     exit(1)
+else:
+    logging.info("Переменные окружения успешно загружены.")
 
 # Загрузить рецепты из JSON-файла
 def load_recipes():
     try:
         with open('recipes.json', 'r', encoding='utf-8') as file:
-            return json.load(file)
+            recipes = json.load(file)
+            logging.info(f"Рецепты загружены: {len(recipes)} рецептов")
+            return recipes
     except FileNotFoundError:
         logging.error("Файл recipes.json не найден.")
         exit(1)
@@ -46,6 +53,7 @@ def send_recipe(bot, chat_id, recipe):
     formatted_text = format_recipe(recipe)
     try:
         bot.send_message(chat_id=chat_id, text=formatted_text)
+        logging.info("Сообщение успешно отправлено.")
     except TelegramError as e:
         logging.error(f"Ошибка при отправке сообщения: {e}")
 
@@ -62,16 +70,16 @@ def schedule_messages(bot, chat_id, recipes):
 
     schedule.every().day.at("08:00").do(send_random_recipe)
     schedule.every().day.at("18:00").do(send_random_recipe)
+    logging.info("Расписание сообщений установлено.")
 
 def main():
     # Инициализация бота
     bot = Bot(token=TOKEN)
     recipes = load_recipes()
-
     # Планирование сообщений
     schedule_messages(bot, CHAT_ID, recipes)
-
     # Запуск планировщика
+    logging.info("Запуск планировщика.")
     while True:
         schedule.run_pending()
         time.sleep(1)
