@@ -36,6 +36,11 @@ jobs:
         pip install --upgrade pip
         pip install -r requirements.txt
 
+    - name: Verify installed packages
+      run: |
+        source venv/bin/activate
+        pip list
+
     - name: Run bot
       env:
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
