@@ -6,8 +6,10 @@ import time
 import random
 from telegram import Bot
 from telegram.error import TelegramError
+from telegram.ext import Application, ApplicationBuilder
 from dotenv import load_dotenv
 import os
+import asyncio
 
 # Настройка логирования
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.DEBUG)
@@ -48,36 +50,36 @@ def format_recipe(recipe):
     formatted += '\n'.join(recipe.get('instructions', []))
     return formatted
 
-# Отправка сообщения в канал
-def send_recipe(bot, chat_id, recipe):
+# Асинхронная отправка сообщения в канал
+async def send_recipe(bot, chat_id, recipe):
     formatted_text = format_recipe(recipe)
     try:
-        bot.send_message(chat_id=chat_id, text=formatted_text)
+        await bot.send_message(chat_id=chat_id, text=formatted_text)
         logging.info("Сообщение успешно отправлено.")
     except TelegramError as e:
         logging.error(f"Ошибка при отправке сообщения: {e}")
 
 # Планирование отправки рецептов
 def schedule_messages(bot, chat_id, recipes):
-    def send_random_recipe():
+    async def send_random_recipe():
         if not recipes:
             logging.info("Рецепты закончились. Перезагружаем список...")
             recipes.extend(load_recipes())  # Перезагружаем список рецептов
 
         recipe = random.choice(recipes)
         recipes.remove(recipe)  # Удаляем выбранный рецепт из списка
-        send_recipe(bot, chat_id, recipe)
+        await send_recipe(bot, chat_id, recipe)
 
-    schedule.every().day.at("08:00").do(send_random_recipe)
-    schedule.every().day.at("18:00").do(send_random_recipe)
+    schedule.every().day.at("08:00").do(lambda: asyncio.run(send_random_recipe()))
+    schedule.every().day.at("18:00").do(lambda: asyncio.run(send_random_recipe()))
     logging.info("Расписание сообщений установлено для отправки в 8:00 и 18:00.")
 
 def main():
     # Инициализация бота
-    bot = Bot(token=TOKEN)
+    application = ApplicationBuilder().token(TOKEN).build()
     recipes = load_recipes()
     # Планирование сообщений
-    schedule_messages(bot, CHAT_ID, recipes)
+    schedule_messages(application.bot, CHAT_ID, recipes)
     # Запуск планировщика
     logging.info("Запуск планировщика.")
     while True:
