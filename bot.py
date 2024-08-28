@@ -1,15 +1,12 @@
 import json
-import re
 import logging
-import schedule
-import time
 import random
+import asyncio
 from telegram import Bot
 from telegram.error import TelegramError
 from telegram.ext import Application, ApplicationBuilder
 from dotenv import load_dotenv
 import os
-import asyncio
 
 # Настройка логирования
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.DEBUG)
@@ -18,9 +15,6 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 load_dotenv()
 TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 CHAT_ID = os.getenv('TELEGRAM_CHANNEL_ID')
-
-logging.debug(f"TOKEN: {TOKEN}")
-logging.debug(f"CHAT_ID: {CHAT_ID}")
 
 # Проверка переменных окружения
 if not TOKEN or not CHAT_ID:
@@ -59,32 +53,28 @@ async def send_recipe(bot, chat_id, recipe):
     except TelegramError as e:
         logging.error(f"Ошибка при отправке сообщения: {e}")
 
-# Планирование отправки рецептов
-def schedule_messages(bot, chat_id, recipes):
-    async def send_random_recipe():
+# Асинхронная функция для выполнения задач в заданное время
+async def periodic_task(bot, chat_id, recipes):
+    while True:
+        now = asyncio.get_event_loop().time()
+        next_run = (now + 3600*8) % (24*3600)  # например, 8 часов позже
+        await asyncio.sleep(next_run)
+        
         if not recipes:
             logging.info("Рецепты закончились. Перезагружаем список...")
             recipes.extend(load_recipes())  # Перезагружаем список рецептов
-
         recipe = random.choice(recipes)
         recipes.remove(recipe)  # Удаляем выбранный рецепт из списка
         await send_recipe(bot, chat_id, recipe)
 
-    schedule.every().day.at("08:00").do(lambda: asyncio.run(send_random_recipe()))
-    schedule.every().day.at("18:00").do(lambda: asyncio.run(send_random_recipe()))
-    logging.info("Расписание сообщений установлено для отправки в 8:00 и 18:00.")
-
-def main():
+async def main():
     # Инициализация бота
     application = ApplicationBuilder().token(TOKEN).build()
     recipes = load_recipes()
-    # Планирование сообщений
-    schedule_messages(application.bot, CHAT_ID, recipes)
-    # Запуск планировщика
-    logging.info("Запуск планировщика.")
-    while True:
-        schedule.run_pending()
-        time.sleep(1)
+
+    # Запуск периодической задачи
+    logging.info("Запуск периодической задачи.")
+    await periodic_task(application.bot, CHAT_ID, recipes)
 
 if __name__ == '__main__':
-    main()
+    asyncio.run(main())
