@@ -72,21 +72,25 @@ async def periodic_task(bot, chat_id, recipes, interval_hours=8):
             await asyncio.sleep(60)  # Пауза перед повторной попыткой
 
 async def main():
-    # Инициализация бота
-    application = ApplicationBuilder().token(TOKEN).build()
-    recipes = load_recipes()
+    while True:
+        try:
+            # Инициализация бота
+            application = ApplicationBuilder().token(TOKEN).build()
+            recipes = load_recipes()
 
-    # Запуск периодической задачи
-    logging.info("Запуск периодической задачи.")
-    task = asyncio.create_task(periodic_task(application.bot, CHAT_ID, recipes))
+            # Запуск периодической задачи
+            logging.info("Запуск периодической задачи.")
+            task = asyncio.create_task(periodic_task(application.bot, CHAT_ID, recipes))
 
-    # Запуск бота
-    await application.start()
-    await task
+            # Запуск бота
+            await application.start()
+            await task
+        except Exception as e:
+            logging.error(f"Произошла ошибка: {e}")
+            await asyncio.sleep(60)  # Пауза перед повторной попыткой
 
 if __name__ == '__main__':
     try:
         asyncio.run(main())
     except Exception as e:
-        logging.error(f"Произошла ошибка: {e}")
-        exit(1)
+        logging.error(f"Произошла ошибка при запуске основного цикла: {e}")
