@@ -2,6 +2,7 @@ import json
 import logging
 import random
 import asyncio
+from telegram import Bot
 from telegram.error import TelegramError
 from telegram.ext import ApplicationBuilder
 from dotenv import load_dotenv
@@ -51,22 +52,24 @@ async def send_recipe(bot, chat_id, recipe):
         logging.info("Сообщение успешно отправлено.")
     except TelegramError as e:
         logging.error(f"Ошибка при отправке сообщения: {e}")
-    except Exception as e:
-        logging.error(f"Непредвиденная ошибка при отправке сообщения: {e}")
 
 # Асинхронная функция для выполнения задач в заданное время
 async def periodic_task(bot, chat_id, recipes, interval_hours=8):
     while True:
-        if not recipes:
-            logging.info("Рецепты закончились. Перезагружаем список...")
-            recipes.extend(load_recipes())  # Перезагружаем список рецептов
-        
-        recipe = random.choice(recipes)
-        recipes.remove(recipe)  # Удаляем выбранный рецепт из списка
-        await send_recipe(bot, chat_id, recipe)
+        try:
+            if not recipes:
+                logging.info("Рецепты закончились. Перезагружаем список...")
+                recipes.extend(load_recipes())  # Перезагружаем список рецептов
 
-        logging.info(f"Следующее сообщение будет отправлено через {interval_hours} часов.")
-        await asyncio.sleep(interval_hours * 3600)  # Пауза на указанное количество часов
+            recipe = random.choice(recipes)
+            recipes.remove(recipe)  # Удаляем выбранный рецепт из списка
+            await send_recipe(bot, chat_id, recipe)
+
+            logging.info(f"Следующее сообщение будет отправлено через {interval_hours} часов.")
+            await asyncio.sleep(interval_hours * 3600)  # Пауза на указанное количество часов
+        except Exception as e:
+            logging.error(f"Произошла ошибка в периодической задаче: {e}")
+            await asyncio.sleep(60)  # Пауза перед повторной попыткой
 
 async def main():
     # Инициализация бота
@@ -79,14 +82,11 @@ async def main():
 
     # Запуск бота
     await application.start()
-    await application.updater.start_polling()  # Убедимся, что бот работает корректно
     await task
-
-    # Остановка бота при завершении задачи
-    await application.stop()
 
 if __name__ == '__main__':
     try:
         asyncio.run(main())
     except Exception as e:
         logging.error(f"Произошла ошибка: {e}")
+        exit(1)
