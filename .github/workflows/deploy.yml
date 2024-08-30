@@ -3,6 +3,7 @@ name: Run Bot
 on:
   schedule:
     - cron: '0 8,18 * * *'  # Запуск в 8:00 и 18:00 по UTC
+  workflow_dispatch:
 
 jobs:
   build:
@@ -10,10 +11,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3  # Обновление до последней версии
+        uses: actions/checkout@v2
 
       - name: Set up Python
-        uses: actions/setup-python@v4  # Обновление до последней версии
+        uses: actions/setup-python@v2
         with:
           python-version: '3.12'
 
@@ -22,8 +23,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run bot
-        run: python bot.py
+      - name: Check and run bot
+        run: |
+          ./check_bot_status.sh
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
