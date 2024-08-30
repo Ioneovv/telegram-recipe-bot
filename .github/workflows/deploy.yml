@@ -2,7 +2,7 @@ name: Run Bot
 
 on:
   schedule:
-    - cron: '0 8,18 * * *'  # Запуск в 8:00 и 18:00 по UTC
+    - cron: '0 */6 * * *'  # Запуск каждые 6 часов
   workflow_dispatch:  # Позволяет запускать workflow вручную
 
 jobs:
