@@ -2,7 +2,6 @@ import json
 import logging
 import random
 import asyncio
-from telegram import Bot
 from telegram.error import TelegramError
 from telegram.ext import ApplicationBuilder
 from dotenv import load_dotenv
@@ -52,6 +51,8 @@ async def send_recipe(bot, chat_id, recipe):
         logging.info("Сообщение успешно отправлено.")
     except TelegramError as e:
         logging.error(f"Ошибка при отправке сообщения: {e}")
+    except Exception as e:
+        logging.error(f"Непредвиденная ошибка при отправке сообщения: {e}")
 
 # Асинхронная функция для выполнения задач в заданное время
 async def periodic_task(bot, chat_id, recipes, interval_hours=8):
@@ -78,7 +79,11 @@ async def main():
 
     # Запуск бота
     await application.start()
+    await application.updater.start_polling()  # Убедимся, что бот работает корректно
     await task
+
+    # Остановка бота при завершении задачи
+    await application.stop()
 
 if __name__ == '__main__':
     try:
