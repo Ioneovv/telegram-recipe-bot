@@ -4,7 +4,7 @@ import random
 import asyncio
 from telegram import Bot
 from telegram.error import TelegramError
-from telegram.ext import Application, ApplicationBuilder
+from telegram.ext import ApplicationBuilder
 from dotenv import load_dotenv
 import os
 
@@ -54,18 +54,18 @@ async def send_recipe(bot, chat_id, recipe):
         logging.error(f"Ошибка при отправке сообщения: {e}")
 
 # Асинхронная функция для выполнения задач в заданное время
-async def periodic_task(bot, chat_id, recipes):
+async def periodic_task(bot, chat_id, recipes, interval_hours=8):
     while True:
-        now = asyncio.get_event_loop().time()
-        next_run = (now + 3600*8) % (24*3600)  # например, 8 часов позже
-        await asyncio.sleep(next_run)
-        
         if not recipes:
             logging.info("Рецепты закончились. Перезагружаем список...")
             recipes.extend(load_recipes())  # Перезагружаем список рецептов
+        
         recipe = random.choice(recipes)
         recipes.remove(recipe)  # Удаляем выбранный рецепт из списка
         await send_recipe(bot, chat_id, recipe)
+
+        logging.info(f"Следующее сообщение будет отправлено через {interval_hours} часов.")
+        await asyncio.sleep(interval_hours * 3600)  # Пауза на указанное количество часов
 
 async def main():
     # Инициализация бота
@@ -74,7 +74,14 @@ async def main():
 
     # Запуск периодической задачи
     logging.info("Запуск периодической задачи.")
-    await periodic_task(application.bot, CHAT_ID, recipes)
+    task = asyncio.create_task(periodic_task(application.bot, CHAT_ID, recipes))
+
+    # Запуск бота
+    await application.start()
+    await task
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except Exception as e:
+        logging.error(f"Произошла ошибка: {e}")
