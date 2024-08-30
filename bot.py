@@ -2,7 +2,8 @@ import json
 import logging
 import random
 import asyncio
-from telegram import Bot
+import requests
+from telegram import Bot, InputFile
 from telegram.error import TelegramError
 from telegram.ext import ApplicationBuilder
 from dotenv import load_dotenv
@@ -15,10 +16,12 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 load_dotenv()
 TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 CHAT_ID = os.getenv('TELEGRAM_CHANNEL_ID')
+IMAGE_API_URL = os.getenv('IMAGE_API_URL')  # URL API генерации изображений
+IMAGE_API_KEY = os.getenv('IMAGE_API_KEY')  # Ключ API генерации изображений
 
 # Проверка переменных окружения
-if not TOKEN or not CHAT_ID:
-    logging.error("Токен или ID канала не установлены в переменных окружения.")
+if not TOKEN or not CHAT_ID or not IMAGE_API_URL or not IMAGE_API_KEY:
+    logging.error("Токен, ID канала или параметры API не установлены в переменных окружения.")
     exit(1)
 else:
     logging.info("Переменные окружения успешно загружены.")
@@ -44,17 +47,57 @@ def format_recipe(recipe):
     formatted += '\n'.join(recipe.get('instructions', []))
     return formatted
 
+# Получение изображения из API генерации изображений
+def get_image_url(description):
+    try:
+        response = requests.post(
+            IMAGE_API_URL,
+            headers={"Authorization": f"Bearer {IMAGE_API_KEY}"},
+            json={"prompt": description}
+        )
+        response.raise_for_status()
+        image_url = response.json().get('url')
+        if not image_url:
+            logging.error("Не удалось получить URL изображения из API.")
+            return None
+        return image_url
+    except requests.RequestException as e:
+        logging.error(f"Ошибка при запросе к API генерации изображений: {e}")
+        return None
+
+# Скачивание изображения
+def download_image(image_url):
+    try:
+        response = requests.get(image_url)
+        response.raise_for_status()
+        return response.content
+    except requests.RequestException as e:
+        logging.error(f"Ошибка при скачивании изображения: {e}")
+        return None
+
 # Асинхронная отправка сообщения в канал
 async def send_recipe(bot, chat_id, recipe):
     formatted_text = format_recipe(recipe)
-    try:
-        await bot.send_message(chat_id=chat_id, text=formatted_text)
-        logging.info("Сообщение успешно отправлено.")
-    except TelegramError as e:
-        logging.error(f"Ошибка при отправке сообщения: {e}")
+    image_url = get_image_url(formatted_text)
+    if image_url:
+        image_data = download_image(image_url)
+        if image_data:
+            try:
+                await bot.send_photo(chat_id=chat_id, photo=InputFile(image_data, filename='image.jpg'), caption=formatted_text)
+                logging.info("Сообщение с изображением успешно отправлено.")
+            except TelegramError as e:
+                logging.error(f"Ошибка при отправке сообщения с изображением: {e}")
+        else:
+            logging.error("Не удалось скачать изображение.")
+    else:
+        try:
+            await bot.send_message(chat_id=chat_id, text=formatted_text)
+            logging.info("Сообщение без изображения успешно отправлено.")
+        except TelegramError as e:
+            logging.error(f"Ошибка при отправке сообщения: {e}")
 
 # Асинхронная функция для выполнения задач в заданное время
-async def periodic_task(bot, chat_id, recipes, interval_hours=8):
+async def periodic_task(bot, chat_id, recipes, interval_hours=6):
     while True:
         try:
             if not recipes:
@@ -77,6 +120,12 @@ async def main():
             # Инициализация бота
             application = ApplicationBuilder().token(TOKEN).build()
             recipes = load_recipes()
+
+            # Отправка первого рецепта сразу
+            if recipes:
+                recipe = random.choice(recipes)
+                recipes.remove(recipe)  # Удаляем выбранный рецепт из списка
+                await send_recipe(application.bot, CHAT_ID, recipe)
 
             # Запуск периодической задачи
             logging.info("Запуск периодической задачи.")
