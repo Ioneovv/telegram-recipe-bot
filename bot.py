@@ -86,7 +86,7 @@ async def main():
             await application.start()
             await task
         except Exception as e:
-            logging.error(f"Произошла ошибка: {e}")
+            logging.error(f"Произошла ошибка в основном цикле: {e}")
             await asyncio.sleep(60)  # Пауза перед повторной попыткой
 
 if __name__ == '__main__':
