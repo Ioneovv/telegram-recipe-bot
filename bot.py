@@ -2,7 +2,7 @@ import json
 import logging
 import random
 import asyncio
-from telegram import Bot
+from telegram import Bot, Poll
 from telegram.ext import ApplicationBuilder
 from telegram.error import TelegramError
 from dotenv import load_dotenv
@@ -52,17 +52,58 @@ async def send_recipe(bot, chat_id, recipe):
     except TelegramError as e:
         logging.error(f"Ошибка при отправке сообщения: {e}")
 
+# Асинхронная отправка опроса
+async def send_poll(bot, chat_id):
+    question = "Какие рецепты вам больше нравятся?"
+    options = ["Десерты", "Салаты", "Горячее", "Супы", "Завтраки", "Прочее"]
+    
+    try:
+        message = await bot.send_poll(chat_id=chat_id, question=question, options=options, is_anonymous=False)
+        logging.info("Опрос успешно отправлен.")
+        return message.poll.id  # Возвращаем идентификатор опроса для последующей обработки
+    except TelegramError as e:
+        logging.error(f"Ошибка при отправке опроса: {e}")
+        return None
+
+# Получить выбранную категорию на основе результатов опроса
+async def get_poll_results(bot, poll_id):
+    # Получить результаты опроса (эту часть можно доработать при наличии API для получения результата голосования)
+    pass  # Для примера оставим заглушку
+
 # Асинхронная функция для выполнения задач в заданное время
 async def periodic_task(bot, chat_id, recipes, interval_hours=6):
+    post_count = 0  # Счётчик отправленных постов
+    selected_category = None  # Хранение выбранной категории
+
     while True:
         try:
             if not recipes:
                 logging.info("Рецепты закончились. Перезагружаем список...")
                 recipes.extend(load_recipes())  # Перезагружаем список рецептов
 
-            recipe = random.choice(recipes)
+            # Фильтруем рецепты по выбранной категории, если она установлена
+            if selected_category:
+                filtered_recipes = [recipe for recipe in recipes if recipe.get('category') == selected_category]
+                if filtered_recipes:
+                    recipe = random.choice(filtered_recipes)
+                else:
+                    recipe = random.choice(recipes)
+            else:
+                recipe = random.choice(recipes)
+
             recipes.remove(recipe)  # Удаляем выбранный рецепт из списка
             await send_recipe(bot, chat_id, recipe)
+
+            post_count += 1  # Увеличиваем счетчик
+
+            # После каждого пятого поста отправляем опрос
+            if post_count >= 5:
+                poll_id = await send_poll(bot, chat_id)
+                if poll_id:
+                    # Здесь можно реализовать логику получения и обработки результатов опроса
+                    selected_category = "Десерты"  # Пример: присвоим значение вручную для тестирования
+                    logging.info(f"Следующая тема рецептов: {selected_category}")
+                post_count = 0  # Сбрасываем счетчик после опроса
 
             logging.info(f"Следующее сообщение будет отправлено через {interval_hours} часов.")
             await asyncio.sleep(interval_hours * 3600)  # Пауза на указанное количество часов
