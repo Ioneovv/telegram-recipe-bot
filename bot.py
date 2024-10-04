@@ -1,148 +1,147 @@
-import json
 import logging
+import re
+import json
 import random
-import asyncio
-from telegram import Bot, Poll
-from telegram.ext import ApplicationBuilder
-from telegram.error import TelegramError
-from dotenv import load_dotenv
-import os
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ApplicationBuilder, CallbackContext, CommandHandler, CallbackQueryHandler
+import requests
 
-# Настройка логирования
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.DEBUG)
+# Логирование
+logging.basicConfig(level=logging.INFO)
 
-# Загрузить переменные окружения
-load_dotenv()
-TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
-CHAT_ID = os.getenv('TELEGRAM_CHANNEL_ID')
+# Глобальная переменная для хранения рецептов
+recipes = []
 
-# Проверка переменных окружения
-if not TOKEN or not CHAT_ID:
-    logging.error("Одно или несколько необходимых значений не установлены в переменных окружения.")
-    exit(1)
+# Эмодзи для категорий
+CATEGORY_EMOJIS = {
+    "Салаты": "🥗",
+    "Супы": "🍲",
+    "Десерты": "🍰",
+    "Основные блюда": "🍽",
+    "Закуски": "🥪",
+    "Напитки": "🥤",
+}
 
-# Загрузить рецепты из JSON-файла
+# Загрузка рецептов
 def load_recipes():
     try:
-        with open('recipes.json', 'r', encoding='utf-8') as file:
-            recipes = json.load(file)
-            logging.info(f"Рецепты загружены: {len(recipes)} рецептов")
-            return recipes
-    except FileNotFoundError:
-        logging.error("Файл recipes.json не найден.")
-        exit(1)
-    except json.JSONDecodeError:
-        logging.error("Ошибка декодирования JSON в файле recipes.json.")
-        exit(1)
+        with open('recipes.json', 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        logging.error("Ошибка загрузки или обработки recipes.json")
+        return []
 
-# Форматирование текста рецепта
+# Форматирование рецепта
 def format_recipe(recipe):
-    formatted = recipe.get('title', 'Без названия') + '\n\n'
-    formatted += '\n'.join(f"{item['ingredient']} - {item['amount']}" for item in recipe.get('ingredients', [])) + '\n\n'
-    formatted += '\n'.join(recipe.get('instructions', []))
-    return formatted
+    recipe_text = f"🍽 **{recipe['title']}**\n\n"
+    recipe_text += "📝 **Ингредиенты:**\n"
+    for ingredient in recipe.get('ingredients', []):
+        amount = ingredient.get('amount', '')
+        recipe_text += f"🔸 {ingredient['ingredient']:20} {amount}\n"
+    recipe_text += "\n🧑‍🍳 **Приготовление:**\n"
+    for i, step in enumerate(recipe.get('instructions', []), start=1):
+        recipe_text += f"{i}. {step}\n"
+    return recipe_text
 
-# Асинхронная отправка сообщения в канал
-async def send_recipe(bot, chat_id, recipe):
-    formatted_text = format_recipe(recipe)
-    
-    try:
-        await bot.send_message(chat_id=chat_id, text=formatted_text)
-        logging.info("Сообщение успешно отправлено.")
-    except TelegramError as e:
-        logging.error(f"Ошибка при отправке сообщения: {e}")
+# Получение категорий
+def get_categories():
+    return sorted(set(recipe.get('category') for recipe in recipes))
 
-# Асинхронная отправка опроса
-async def send_poll(bot, chat_id):
-    question = "Какие рецепты вам больше нравятся? 🍽️"
-    options = [
-        "🍰 Десерты",
-        "🥗 Салаты",
-        "🍛 Горячее",
-        "🍲 Супы",
-        "🍳 Завтраки"
+# Поиск рецептов
+def search_recipes(query):
+    return [recipe for recipe in recipes if query.lower() in recipe['title'].lower()]
+
+# Функция составления меню
+def create_weekly_menu():
+    selected_recipes = random.sample(recipes, 7)
+    menu = "\n".join([f"{i + 1}. {recipe['title']}" for i, recipe in enumerate(selected_recipes)])
+    return f"📅 **Ваше меню на неделю:**\n{menu}"
+
+# Команды и обработчики
+async def start(update: Update, context: CallbackContext):
+    global recipes
+    recipes = load_recipes()
+    if not recipes:
+        await update.message.reply_text("Не удалось загрузить рецепты. Пожалуйста, попробуйте позже.")
+        return
+
+    categories = get_categories()
+    keyboard = [
+        [InlineKeyboardButton(f"{CATEGORY_EMOJIS.get(category, '🍴')} {category}", callback_data=f'category_{category}')]
+        for category in categories
     ]
-    
-    try:
-        message = await bot.send_poll(chat_id=chat_id, question=question, options=options, is_anonymous=False)
-        logging.info("Опрос успешно отправлен.")
-        return message.poll.id  # Возвращаем идентификатор опроса для последующей обработки
-    except TelegramError as e:
-        logging.error(f"Ошибка при отправке опроса: {e}")
-        return None
+    keyboard.append([InlineKeyboardButton("📅 Составить меню на неделю", callback_data='weekly_menu')])
+    keyboard.append([InlineKeyboardButton("🔍 Поиск рецептов", callback_data='search')])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text('Выберите категорию рецептов:', reply_markup=reply_markup)
 
-# Получить выбранную категорию на основе результатов опроса
-async def get_poll_results(bot, poll_id):
-    # Получить результаты опроса (эту часть можно доработать при наличии API для получения результата голосования)
-    pass  # Для примера оставим заглушку
+async def category_button(update: Update, context: CallbackContext):
+    query = update.callback_query
+    await query.answer()
+    category = query.data.split('_')[1]
 
-# Асинхронная функция для выполнения задач в заданное время
-async def periodic_task(bot, chat_id, recipes, interval_hours=8):  # Изменённый интервал на 8 часов
-    post_count = 0  # Счётчик отправленных постов
-    selected_category = None  # Хранение выбранной категории
+    recipes_in_category = [recipe for recipe in recipes if recipe['category'] == category]
+    if not recipes_in_category:
+        await query.message.reply_text("Нет рецептов в этой категории.")
+        return
 
-    while True:
-        try:
-            if not recipes:
-                logging.info("Рецепты закончились. Перезагружаем список...")
-                recipes.extend(load_recipes())  # Перезагружаем список рецептов
+    keyboard = [[InlineKeyboardButton(recipe['title'], callback_data=f'recipe_{recipes.index(recipe)}')] for recipe in recipes_in_category]
+    keyboard.append([InlineKeyboardButton("🏠 Домой", callback_data='home')])
+    reply_markup = InlineKeyboardMarkup(keyboard)
 
-            # Фильтруем рецепты по выбранной категории, если она установлена
-            if selected_category:
-                filtered_recipes = [recipe for recipe in recipes if recipe.get('category') == selected_category]
-                if filtered_recipes:
-                    recipe = random.choice(filtered_recipes)
-                else:
-                    recipe = random.choice(recipes)
-            else:
-                recipe = random.choice(recipes)
+    await query.message.edit_text(f"Рецепты категории: {category}", reply_markup=reply_markup)
 
-            recipes.remove(recipe)  # Удаляем выбранный рецепт из списка
-            await send_recipe(bot, chat_id, recipe)
+async def recipe_button(update: Update, context: CallbackContext):
+    query = update.callback_query
+    await query.answer()
 
-            post_count += 1  # Увеличиваем счетчик
+    recipe_index = int(query.data.split('_')[1])
+    recipe = recipes[recipe_index]
+    recipe_text = format_recipe(recipe)
 
-            # После каждого пятого поста отправляем опрос
-            if post_count >= 5:
-                poll_id = await send_poll(bot, chat_id)
-                if poll_id:
-                    # Здесь можно реализовать логику получения и обработки результатов опроса
-                    selected_category = "Десерты"  # Пример: присвоим значение вручную для тестирования
-                    logging.info(f"Следующая тема рецептов: {selected_category}")
-                post_count = 0  # Сбрасываем счетчик после опроса
+    keyboard = [
+        [InlineKeyboardButton("Назад", callback_data=f'category_{recipe["category"]}')],
+        [InlineKeyboardButton("🏠 Домой", callback_data='home')]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
 
-            logging.info(f"Следующее сообщение будет отправлено через {interval_hours} часов.")
-            await asyncio.sleep(interval_hours * 3600)  # Пауза на указанные часы
-        except Exception as e:
-            logging.error(f"Произошла ошибка в периодической задаче: {e}")
-            await asyncio.sleep(60)  # Пауза перед повторной попыткой
+    await query.message.edit_text(recipe_text, reply_markup=reply_markup)
+
+async def weekly_menu(update: Update, context: CallbackContext):
+    menu = create_weekly_menu()
+    await update.callback_query.message.reply_text(menu)
+
+async def search_handler(update: Update, context: CallbackContext):
+    await update.callback_query.answer()
+    await update.callback_query.message.reply_text("Введите название или ингредиент для поиска:")
+    return 'SEARCH'
+
+async def handle_search(update: Update, context: CallbackContext):
+    query = update.message.text
+    results = search_recipes(query)
+    if not results:
+        await update.message.reply_text("Ничего не найдено.")
+        return
+
+    keyboard = [[InlineKeyboardButton(recipe['title'], callback_data=f'recipe_{recipes.index(recipe)}')] for recipe in results]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text("Результаты поиска:", reply_markup=reply_markup)
 
 async def main():
-    try:
-        # Инициализация бота
-        application = ApplicationBuilder().token(TOKEN).build()
-        
-        # Загрузка рецептов
-        recipes = load_recipes()
+    global recipes
+    recipes = load_recipes()
+    
+    app = ApplicationBuilder().token("6953692387:AAEm-p8VtfqdmkHtbs8hxZWS-XNkdRN2lRE").build()
 
-        # Отправка первого рецепта сразу после запуска
-        logging.info("Отправка первого рецепта...")
-        recipe = random.choice(recipes)
-        recipes.remove(recipe)  # Удаляем выбранный рецепт из списка
-        await send_recipe(application.bot, CHAT_ID, recipe)
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CallbackQueryHandler(category_button, pattern=r'category_'))
+    app.add_handler(CallbackQueryHandler(recipe_button, pattern=r'recipe_'))
+    app.add_handler(CallbackQueryHandler(weekly_menu, pattern=r'weekly_menu'))
+    app.add_handler(CallbackQueryHandler(search_handler, pattern=r'search'))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search))
 
-        # Запуск периодической задачи
-        logging.info("Запуск периодической задачи.")
-        task = asyncio.create_task(periodic_task(application.bot, CHAT_ID, recipes))
-
-        # Запуск бота
-        await application.start()
-        await task
-    except Exception as e:
-        logging.error(f"Произошла ошибка при запуске основного цикла: {e}")
+    await app.run_polling()
 
 if __name__ == '__main__':
-    try:
-        asyncio.run(main())
-    except Exception as e:
-        logging.error(f"Произошла ошибка при запуске основного цикла: {e}")
+    import asyncio
+    asyncio.run(main())
