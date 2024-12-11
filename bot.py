@@ -3,7 +3,7 @@ import logging
 import random
 import asyncio
 from telegram import Bot, Poll
-from telegram.ext import ApplicationBuilder
+from telegram.ext import ApplicationBuilder, Application
 from telegram.error import TelegramError
 from dotenv import load_dotenv
 import os
@@ -67,8 +67,12 @@ async def send_poll(bot, chat_id):
 
 # Получить выбранную категорию на основе результатов опроса
 async def get_poll_results(bot, poll_id):
-    # Получить результаты опроса (эту часть можно доработать при наличии API для получения результата голосования)
-    pass  # Для примера оставим заглушку
+    try:
+        # Получение результатов опроса
+        poll = await bot.get_poll(poll_id)
+        logging.info(f"Результаты опроса: {poll.options}")
+    except TelegramError as e:
+        logging.error(f"Ошибка при получении результатов опроса: {e}")
 
 # Асинхронная функция для выполнения задач в заданное время
 async def periodic_task(bot, chat_id, recipes, interval_hours=8):  # Изменённый интервал на 8 часов
@@ -103,6 +107,7 @@ async def periodic_task(bot, chat_id, recipes, interval_hours=8):  # Измен�
                     # Здесь можно реализовать логику получения и обработки результатов опроса
                     selected_category = "Десерты"  # Пример: присвоим значение вручную для тестирования
                     logging.info(f"Следующая тема рецептов: {selected_category}")
+                    await get_poll_results(bot, poll_id)  # Получаем результаты опроса
                 post_count = 0  # Сбрасываем счетчик после опроса
 
             logging.info(f"Следующее сообщение будет отправлено через {interval_hours} часов.")
@@ -114,8 +119,8 @@ async def periodic_task(bot, chat_id, recipes, interval_hours=8):  # Измен�
 async def main():
     try:
         # Инициализация бота
-        application = ApplicationBuilder().token(TOKEN).build()
-        
+        application = Application.builder().token(TOKEN).build()
+
         # Загрузка рецептов
         recipes = load_recipes()
 
@@ -130,7 +135,7 @@ async def main():
         task = asyncio.create_task(periodic_task(application.bot, CHAT_ID, recipes))
 
         # Запуск бота
-        await application.start()
+        await application.run_polling()  # Используем run_polling для асинхронной работы
         await task
     except Exception as e:
         logging.error(f"Произошла ошибка при запуске основного цикла: {e}")
