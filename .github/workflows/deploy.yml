@@ -1,5 +1,4 @@
 name: Run Bot
-
 on:
   schedule:
     - cron: '0 */6 * * *'  # Запуск каждые 6 часов
